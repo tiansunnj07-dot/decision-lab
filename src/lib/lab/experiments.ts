@@ -32,4 +32,11 @@ export const experiments: Experiment[] = [
     tags: ["模拟", "决策"],
     status: "coming-soon",
   },
+  {
+    slug: "executive-judgment",
+    title: "高管判断力训练",
+    description: "面向高管的认知偏差识别与决策力提升训练，在模拟陷阱中锻炼真实判断力。",
+    tags: ["认知偏差", "高管决策", "交互"],
+    status: "coming-soon",
+  },
 ];
