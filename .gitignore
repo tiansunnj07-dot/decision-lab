@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 微信公众号配置（含 AppSecret，不推送）
+scripts/wechat-config.ts
