@@ -13,6 +13,15 @@ export interface BlogPost {
  */
 export const posts: BlogPost[] = [
   {
+    slug: "taming-the-data-future",
+    title: "驯服数据未来：AI 与大数据时代的个人进阶指南",
+    description:
+      "AI 大数据时代已经到来，就像大航海时代的美洲大草原上奔驰过一群烈马。你是四散奔逃，还是学习驾驭这种新物种？",
+    tags: ["AI", "大数据", "职业发展", "数据产品经理"],
+    date: "2026-03-04",
+    readingTime: "10 分钟",
+  },
+  {
     slug: "spark-performance-tuning",
     title: "Spark 性能调优实战：从 OOM 到丝滑运行",
     description:
