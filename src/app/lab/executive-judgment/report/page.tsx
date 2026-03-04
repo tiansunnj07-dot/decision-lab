@@ -87,16 +87,27 @@ export default function ReportPage() {
     
     setIsGenerating(true);
     try {
-      const jd5WeakNames = result!.jd5WeakTop2.map(
-        (w) => `${w.key} ${JD5_STEPS[w.key].name}`
-      );
       await downloadShareCard({
         top1: result.top1,
         top2: result.top2,
         confidence: result.confidence,
         personaDist: result.personaDist,
         evidence,
-        jd5WeakNames,
+        jd5Weak: result.jd5WeakTop2.map((w) => ({
+          name: `${w.key} ${JD5_STEPS[w.key].name}`,
+          description: JD5_STEPS[w.key].description,
+          question: JD5_STEPS[w.key].question,
+        })),
+        strengths: top1Info.strengths,
+        risks: top1Info.risks,
+        trapTitle: trap?.title,
+        trapOutcome: result.trapOutcome
+          ? {
+              timeline: result.trapOutcome.timeline,
+              stateDelta: result.trapOutcome.stateDelta,
+            }
+          : undefined,
+        upgradeTips: trap?.upgradeTips ?? [],
       });
     } catch (e) {
       console.error("生成分享卡片失败:", e);
@@ -416,7 +427,7 @@ export default function ReportPage() {
             ) : (
               <>
                 <Download className="mr-2 h-4 w-4" />
-                下载我的报告卡
+                下载完整报告卡
               </>
             )}
           </Button>

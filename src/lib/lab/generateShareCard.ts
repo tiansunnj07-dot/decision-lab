@@ -1,9 +1,15 @@
 // lib/lab/generateShareCard.ts
-// 生成分享卡片图片（Canvas 2D API + QR Code）
+// 生成完整决策报告卡片（Canvas 2D API + QR Code）
+// 包含所有报告模块：人格揭示、优势与风险、行为证据、JD5盲区、风险路径回放、升级路径
 
 import QRCode from "qrcode";
 import type { Persona } from "./decisionEngine";
 import { PERSONA_INFO } from "./personaMetadata";
+
+interface TrapOutcomeData {
+  timeline: { t: string; text: string }[];
+  stateDelta: { H: number; S: number; R: number; V: number };
+}
 
 interface ShareCardData {
   top1: Persona;
@@ -11,50 +17,69 @@ interface ShareCardData {
   confidence: number;
   personaDist: Record<Persona, number>;
   evidence: string[];
-  jd5WeakNames: string[];
+  jd5Weak: { name: string; description: string; question: string }[];
+  strengths: string[];
+  risks: string[];
+  trapTitle?: string;
+  trapOutcome?: TrapOutcomeData;
+  upgradeTips: string[];
 }
 
 const PERSONA_COLORS: Record<Persona, string> = {
-  E: "#7c3aed", // violet
-  A: "#2563eb", // blue
-  D: "#059669", // emerald
-  I: "#d97706", // amber
-  O: "#e11d48", // rose
+  E: "#7c3aed",
+  A: "#2563eb",
+  D: "#059669",
+  I: "#d97706",
+  O: "#e11d48",
 };
 
-const CARD_W = 750;
-const CARD_H = 1334;
 const PERSONAS_ORDER: Persona[] = ["E", "A", "D", "I", "O"];
+const CARD_W = 750;
+const MARGIN = 65;
+const CONTENT_W = CARD_W - MARGIN * 2;
 
 /**
- * 生成分享卡片并触发下载
+ * 生成完整决策报告卡片并触发下载
  */
 export async function downloadShareCard(data: ShareCardData): Promise<void> {
-  const canvas = document.createElement("canvas");
-  canvas.width = CARD_W;
-  canvas.height = CARD_H;
-  const ctx = canvas.getContext("2d")!;
-
-  // ── 背景渐变 ──────────────────────────
-  const bg = ctx.createLinearGradient(0, 0, 0, CARD_H);
-  bg.addColorStop(0, "#0f0a1e");
-  bg.addColorStop(0.4, "#1a1035");
-  bg.addColorStop(1, "#0d0820");
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, CARD_W, CARD_H);
-
-  // 装饰光斑
-  drawGlow(ctx, 150, 200, 250, "rgba(124, 58, 237, 0.08)");
-  drawGlow(ctx, 600, 900, 300, "rgba(59, 130, 246, 0.06)");
-
   const top1Info = PERSONA_INFO[data.top1];
   const top2Info = PERSONA_INFO[data.top2];
   const color = PERSONA_COLORS[data.top1];
   const confPct = Math.round(data.confidence * 100);
 
+  // ── 第一遍：计算内容高度 ──────────────────────────
+  const measureCanvas = document.createElement("canvas");
+  measureCanvas.width = CARD_W;
+  measureCanvas.height = 100;
+  const mCtx = measureCanvas.getContext("2d")!;
+
+  const totalHeight = calculateTotalHeight(mCtx, data, top1Info, color);
+
+  // ── 第二遍：实际绘制 ──────────────────────────
+  const canvas = document.createElement("canvas");
+  canvas.width = CARD_W;
+  canvas.height = totalHeight;
+  const ctx = canvas.getContext("2d")!;
+
+  // ── 背景渐变 ──────────────────────────
+  const bg = ctx.createLinearGradient(0, 0, 0, totalHeight);
+  bg.addColorStop(0, "#0f0a1e");
+  bg.addColorStop(0.3, "#1a1035");
+  bg.addColorStop(0.7, "#130d28");
+  bg.addColorStop(1, "#0d0820");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CARD_W, totalHeight);
+
+  // 装饰光斑
+  drawGlow(ctx, 150, 200, 250, "rgba(124, 58, 237, 0.08)");
+  drawGlow(ctx, 600, 900, 300, "rgba(59, 130, 246, 0.06)");
+  drawGlow(ctx, 200, totalHeight * 0.6, 280, "rgba(16, 185, 129, 0.04)");
+
   let y = 60;
 
-  // ── 顶部 Logo ──────────────────────────
+  // ═══════════════════════════════════════
+  // Section 0: 顶部 Logo
+  // ═══════════════════════════════════════
   ctx.fillStyle = "rgba(255,255,255,0.5)";
   ctx.font = "500 16px -apple-system, 'SF Pro Display', sans-serif";
   ctx.textAlign = "center";
@@ -64,10 +89,13 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
   ctx.font = "13px -apple-system, sans-serif";
   ctx.fillText("Dr. Sweet Decision Lab", CARD_W / 2, y);
 
-  // ── 主人格揭示 ──────────────────────────
+  // ═══════════════════════════════════════
+  // Section 1: 人格揭示
+  // ═══════════════════════════════════════
   y += 55;
   ctx.fillStyle = "rgba(255,255,255,0.4)";
   ctx.font = "500 14px -apple-system, sans-serif";
+  ctx.textAlign = "center";
   ctx.fillText("我的决策人格", CARD_W / 2, y);
 
   y += 52;
@@ -80,9 +108,9 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
   ctx.font = "16px -apple-system, sans-serif";
   ctx.fillText(top1Info.subtitle, CARD_W / 2, y);
 
-  // ── 标签行 ──────────────────────────
+  // 标签行
   y += 40;
-  // 主导标签
+  ctx.font = "500 13px -apple-system, sans-serif";
   const tag1 = `主导：${top1Info.name}`;
   const tag2 = `次级：${top2Info.name}`;
   const tag1W = ctx.measureText(tag1).width + 24;
@@ -92,7 +120,6 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
 
   roundRect(ctx, tagX, y - 14, tag1W, 28, 14, color);
   ctx.fillStyle = "#fff";
-  ctx.font = "500 13px -apple-system, sans-serif";
   ctx.textAlign = "center";
   ctx.fillText(tag1, tagX + tag1W / 2, y + 4);
 
@@ -101,7 +128,7 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
   ctx.fillStyle = "rgba(255,255,255,0.7)";
   ctx.fillText(tag2, tagX + tag2W / 2, y + 4);
 
-  // ── 置信度 ──────────────────────────
+  // 置信度
   y += 30;
   ctx.fillStyle = "rgba(255,255,255,0.3)";
   ctx.font = "13px -apple-system, sans-serif";
@@ -109,84 +136,368 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
   if (data.confidence < 0.1) {
     ctx.fillText(
       `你在「${top1Info.name}」和「${top2Info.name}」之间频繁切换`,
-      CARD_W / 2, y
+      CARD_W / 2,
+      y
     );
   } else {
     ctx.fillText(`置信度 ${confPct}%  ·  主导模式较为清晰`, CARD_W / 2, y);
   }
 
-  // ── 雷达图 ──────────────────────────
+  // 雷达图
   y += 50;
   drawRadar(ctx, CARD_W / 2, y + 100, 95, data.personaDist, color);
   y += 220;
 
-  // ── 描述 ──────────────────────────
+  // 描述
   y += 10;
   ctx.textAlign = "left";
-  const descLines = wrapText(ctx, top1Info.description, 620, "15px -apple-system, sans-serif");
+  const descLines = wrapText(
+    ctx,
+    top1Info.description,
+    CONTENT_W,
+    "15px -apple-system, sans-serif"
+  );
   ctx.fillStyle = "rgba(255,255,255,0.55)";
   ctx.font = "15px -apple-system, sans-serif";
   for (const line of descLines) {
-    ctx.fillText(line, 65, y);
+    ctx.fillText(line, MARGIN, y);
     y += 24;
   }
 
-  // ── 行为证据 ──────────────────────────
+  // ═══════════════════════════════════════
+  // Section 2: 优势场景 & 高风险场景
+  // ═══════════════════════════════════════
   y += 16;
-  // 分隔线
-  ctx.strokeStyle = "rgba(255,255,255,0.08)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(65, y);
-  ctx.lineTo(CARD_W - 65, y);
-  ctx.stroke();
+  y = drawSeparator(ctx, y);
   y += 24;
 
   ctx.fillStyle = color;
-  ctx.font = "bold 14px -apple-system, sans-serif";
-  ctx.fillText("📊 行为证据", 65, y);
-  y += 20;
+  ctx.font = "bold 16px -apple-system, 'SF Pro Display', sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("⚡ 优势场景 & 高风险场景", MARGIN, y);
+  y += 28;
+
+  // 优势
+  const halfW = (CONTENT_W - 20) / 2;
+  const strengthStartY = y;
+
+  // 优势卡片背景
+  roundRect(
+    ctx,
+    MARGIN,
+    y - 6,
+    halfW,
+    24 + data.strengths.length * 48 + 12,
+    10,
+    "rgba(16, 185, 129, 0.08)"
+  );
+  // 优势标题
+  ctx.fillStyle = "#34d399";
+  ctx.font = "bold 13px -apple-system, sans-serif";
+  ctx.fillText("✦ 优势场景", MARGIN + 14, y + 12);
+  y += 32;
+
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.font = "13px -apple-system, sans-serif";
+  for (const s of data.strengths) {
+    const lines = wrapText(ctx, `· ${s}`, halfW - 28, "13px -apple-system, sans-serif");
+    for (const line of lines) {
+      ctx.fillText(line, MARGIN + 14, y);
+      y += 20;
+    }
+    y += 6;
+  }
+  const strengthEndY = y;
+
+  // 风险卡片
+  const riskX = MARGIN + halfW + 20;
+  y = strengthStartY;
+
+  roundRect(
+    ctx,
+    riskX,
+    y - 6,
+    halfW,
+    24 + data.risks.length * 48 + 12,
+    10,
+    "rgba(239, 68, 68, 0.08)"
+  );
+  ctx.fillStyle = "#f87171";
+  ctx.font = "bold 13px -apple-system, sans-serif";
+  ctx.fillText("⚠ 高风险场景", riskX + 14, y + 12);
+  y += 32;
+
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.font = "13px -apple-system, sans-serif";
+  for (const r of data.risks) {
+    const lines = wrapText(ctx, `· ${r}`, halfW - 28, "13px -apple-system, sans-serif");
+    for (const line of lines) {
+      ctx.fillText(line, riskX + 14, y);
+      y += 20;
+    }
+    y += 6;
+  }
+  const riskEndY = y;
+
+  y = Math.max(strengthEndY, riskEndY) + 8;
+
+  // ═══════════════════════════════════════
+  // Section 3: 行为证据
+  // ═══════════════════════════════════════
+  y = drawSeparator(ctx, y);
+  y += 24;
+
+  ctx.fillStyle = color;
+  ctx.font = "bold 16px -apple-system, 'SF Pro Display', sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("📊 行为证据", MARGIN, y);
+  y += 24;
 
   ctx.fillStyle = "rgba(255,255,255,0.5)";
   ctx.font = "13px -apple-system, sans-serif";
-  for (const ev of data.evidence.slice(0, 2)) {
-    const lines = wrapText(ctx, `· ${ev}`, 600, "13px -apple-system, sans-serif");
+  for (const ev of data.evidence) {
+    const lines = wrapText(ctx, `· ${ev}`, CONTENT_W - 10, "13px -apple-system, sans-serif");
     for (const line of lines) {
-      ctx.fillText(line, 75, y);
+      ctx.fillText(line, MARGIN + 10, y);
       y += 20;
     }
-    y += 4;
+    y += 8;
   }
 
-  // ── JD5 弱项 ──────────────────────────
-  if (data.jd5WeakNames.length > 0) {
-    y += 8;
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    ctx.beginPath();
-    ctx.moveTo(65, y);
-    ctx.lineTo(CARD_W - 65, y);
-    ctx.stroke();
+  // ═══════════════════════════════════════
+  // Section 4: JD5 判断力盲区（完整版）
+  // ═══════════════════════════════════════
+  if (data.jd5Weak.length > 0) {
+    y += 4;
+    y = drawSeparator(ctx, y);
     y += 24;
 
     ctx.fillStyle = color;
-    ctx.font = "bold 14px -apple-system, sans-serif";
-    ctx.fillText("⚠️ 判断力盲区", 65, y);
-    y += 20;
+    ctx.font = "bold 16px -apple-system, 'SF Pro Display', sans-serif";
+    ctx.fillText("🛡️ JD5 判断力盲区", MARGIN, y);
+    y += 8;
 
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
-    ctx.font = "13px -apple-system, sans-serif";
-    ctx.fillText(`易忽略步骤：${data.jd5WeakNames.join("、")}`, 75, y);
-    y += 24;
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.font = "12px -apple-system, sans-serif";
+    ctx.fillText("基于你的决策人格，你最容易忽略的判断力步骤：", MARGIN, y + 14);
+    y += 32;
+
+    for (const weak of data.jd5Weak) {
+      // 盲区卡片背景
+      const cardLines = wrapText(
+        ctx,
+        weak.description,
+        CONTENT_W - 40,
+        "13px -apple-system, sans-serif"
+      );
+      const questionLines = wrapText(
+        ctx,
+        `💡 ${weak.question}`,
+        CONTENT_W - 40,
+        "12px -apple-system, sans-serif"
+      );
+      const cardH = 32 + cardLines.length * 20 + 8 + questionLines.length * 18 + 16;
+
+      roundRect(ctx, MARGIN, y, CONTENT_W, cardH, 10, "rgba(245, 158, 11, 0.08)");
+
+      // 标签 + 名称
+      const badgeText = weak.name.split(" ")[0]; // e.g. "J2"
+      const stepName = weak.name.replace(/^J\d\s*/, "");
+      const badgeW = ctx.measureText(badgeText).width + 16;
+
+      roundRect(ctx, MARGIN + 12, y + 10, badgeW, 22, 6, "rgba(245, 158, 11, 0.2)");
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = "bold 12px -apple-system, sans-serif";
+      ctx.fillText(badgeText, MARGIN + 12 + 8, y + 24);
+
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.font = "bold 14px -apple-system, sans-serif";
+      ctx.fillText(stepName, MARGIN + 12 + badgeW + 8, y + 25);
+
+      let cardY = y + 42;
+      // 描述
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.font = "13px -apple-system, sans-serif";
+      for (const line of cardLines) {
+        ctx.fillText(line, MARGIN + 20, cardY);
+        cardY += 20;
+      }
+      cardY += 4;
+      // 提问
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = "12px -apple-system, sans-serif";
+      for (const line of questionLines) {
+        ctx.fillText(line, MARGIN + 20, cardY);
+        cardY += 18;
+      }
+
+      y += cardH + 10;
+    }
   }
 
-  // ── 底部区域：QR Code + URL ──────────────────────────
-  // 分隔线
-  const bottomY = CARD_H - 200;
-  ctx.strokeStyle = "rgba(255,255,255,0.08)";
-  ctx.beginPath();
-  ctx.moveTo(65, bottomY);
-  ctx.lineTo(CARD_W - 65, bottomY);
-  ctx.stroke();
+  // ═══════════════════════════════════════
+  // Section 5: 风险路径回放
+  // ═══════════════════════════════════════
+  if (data.trapOutcome && data.trapTitle) {
+    y += 4;
+    y = drawSeparator(ctx, y);
+    y += 24;
+
+    ctx.fillStyle = color;
+    ctx.font = "bold 16px -apple-system, 'SF Pro Display', sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`⚠️ 风险路径回放：${data.trapTitle}`, MARGIN, y);
+    y += 28;
+
+    // 时间线
+    const timelineColors = ["#34d399", "#fbbf24", "#f87171"];
+    for (let i = 0; i < data.trapOutcome.timeline.length; i++) {
+      const item = data.trapOutcome.timeline[i];
+      const dotColor = timelineColors[Math.min(i, 2)];
+
+      // 时间线节点
+      ctx.beginPath();
+      ctx.arc(MARGIN + 16, y + 2, 6, 0, Math.PI * 2);
+      ctx.fillStyle = dotColor;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(MARGIN + 16, y + 2, 3, 0, Math.PI * 2);
+      ctx.fillStyle = "#0f0a1e";
+      ctx.fill();
+
+      // 连线
+      if (i < data.trapOutcome.timeline.length - 1) {
+        ctx.beginPath();
+        ctx.moveTo(MARGIN + 16, y + 10);
+        ctx.lineTo(MARGIN + 16, y + 52);
+        ctx.strokeStyle = "rgba(255,255,255,0.1)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // 时间标签
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.font = "bold 12px -apple-system, sans-serif";
+      ctx.fillText(item.t, MARGIN + 32, y + 2);
+
+      // 事件文本
+      const evtLines = wrapText(
+        ctx,
+        item.text,
+        CONTENT_W - 50,
+        "13px -apple-system, sans-serif"
+      );
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.font = "13px -apple-system, sans-serif";
+      let evtY = y + 18;
+      for (const line of evtLines) {
+        ctx.fillText(line, MARGIN + 32, evtY);
+        evtY += 20;
+      }
+      y = evtY + 12;
+    }
+
+    // 状态变量面板
+    y += 8;
+    roundRect(ctx, MARGIN, y, CONTENT_W, 70, 10, "rgba(255,255,255,0.04)");
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.font = "bold 11px -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("关键变量影响", CARD_W / 2, y + 16);
+
+    const vars = [
+      { key: "H" as const, label: "现金流" },
+      { key: "S" as const, label: "结构" },
+      { key: "R" as const, label: "风险" },
+      { key: "V" as const, label: "验证" },
+    ];
+    const cellW = CONTENT_W / 4;
+    for (let i = 0; i < vars.length; i++) {
+      const v = vars[i];
+      const val = data.trapOutcome.stateDelta[v.key];
+      const cx = MARGIN + cellW * i + cellW / 2;
+
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      ctx.font = "11px -apple-system, sans-serif";
+      ctx.fillText(v.label, cx, y + 34);
+
+      const isPositive = val > 0;
+      const isNegative = val < 0;
+      // 风险值的颜色逻辑与其他相反
+      if (v.key === "R") {
+        ctx.fillStyle = isPositive
+          ? "#f87171"
+          : isNegative
+          ? "#34d399"
+          : "rgba(255,255,255,0.3)";
+      } else {
+        ctx.fillStyle = isPositive
+          ? "#34d399"
+          : isNegative
+          ? "#f87171"
+          : "rgba(255,255,255,0.3)";
+      }
+      ctx.font = "bold 18px -apple-system, sans-serif";
+      ctx.fillText(val > 0 ? `+${val}` : `${val}`, cx, y + 56);
+    }
+    y += 82;
+  }
+
+  // ═══════════════════════════════════════
+  // Section 6: 升级路径
+  // ═══════════════════════════════════════
+  if (data.upgradeTips.length > 0) {
+    y += 4;
+    y = drawSeparator(ctx, y);
+    y += 24;
+
+    ctx.fillStyle = color;
+    ctx.font = "bold 16px -apple-system, 'SF Pro Display', sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("⭐ 判断力升级路径", MARGIN, y);
+    y += 24;
+
+    for (let i = 0; i < data.upgradeTips.length; i++) {
+      const tip = data.upgradeTips[i];
+      const tipLines = wrapText(
+        ctx,
+        tip,
+        CONTENT_W - 44,
+        "13px -apple-system, sans-serif"
+      );
+      const tipH = tipLines.length * 20 + 16;
+
+      roundRect(ctx, MARGIN, y, CONTENT_W, tipH, 10, "rgba(124, 58, 237, 0.08)");
+
+      // 序号圆
+      ctx.beginPath();
+      ctx.arc(MARGIN + 18, y + tipH / 2, 11, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 12px -apple-system, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${i + 1}`, MARGIN + 18, y + tipH / 2 + 4);
+
+      ctx.textAlign = "left";
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.font = "13px -apple-system, sans-serif";
+      let tipY = y + 16;
+      for (const line of tipLines) {
+        ctx.fillText(line, MARGIN + 38, tipY);
+        tipY += 20;
+      }
+
+      y += tipH + 10;
+    }
+  }
+
+  // ═══════════════════════════════════════
+  // 底部区域：QR Code + URL
+  // ═══════════════════════════════════════
+  y += 20;
+  y = drawSeparator(ctx, y);
+  y += 24;
 
   // QR Code
   const qrUrl = "https://sweetdatalove.online/lab/executive-judgment";
@@ -198,14 +509,20 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
   });
   const qrImg = await loadImage(qrDataUrl);
   const qrSize = 110;
-  const qrX = CARD_W - 65 - qrSize;
-  const qrY = bottomY + 24;
+  const qrX = CARD_W - MARGIN - qrSize;
+  const qrY = y;
 
-  // QR 背景
-  roundRect(ctx, qrX - 8, qrY - 8, qrSize + 16, qrSize + 16, 12, "rgba(255,255,255,0.06)");
+  roundRect(
+    ctx,
+    qrX - 8,
+    qrY - 8,
+    qrSize + 16,
+    qrSize + 16,
+    12,
+    "rgba(255,255,255,0.06)"
+  );
   ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
 
-  // QR 说明
   ctx.fillStyle = "rgba(255,255,255,0.3)";
   ctx.font = "11px -apple-system, sans-serif";
   ctx.textAlign = "center";
@@ -215,15 +532,17 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(255,255,255,0.6)";
   ctx.font = "500 15px -apple-system, sans-serif";
-  ctx.fillText("你也来测试一下？", 65, qrY + 20);
+  ctx.fillText("你也来测试一下？", MARGIN, qrY + 20);
 
   ctx.fillStyle = "rgba(255,255,255,0.3)";
   ctx.font = "13px -apple-system, sans-serif";
-  ctx.fillText("6-8 分钟 · 纯客户端 · 不存储数据", 65, qrY + 44);
+  ctx.fillText("6-8 分钟 · 纯客户端 · 不存储数据", MARGIN, qrY + 44);
 
   ctx.fillStyle = color;
   ctx.font = "500 13px -apple-system, sans-serif";
-  ctx.fillText("sweetdatalove.online", 65, qrY + 70);
+  ctx.fillText("sweetdatalove.online", MARGIN, qrY + 70);
+
+  y = Math.max(y + qrSize + 40, qrY + qrSize + 50);
 
   // 最底部 footer
   ctx.fillStyle = "rgba(255,255,255,0.15)";
@@ -232,7 +551,7 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
   ctx.fillText(
     "甜博士决策实验室 · sweetdatalove.online · 结果仅供参考",
     CARD_W / 2,
-    CARD_H - 24
+    y
   );
 
   // ── 导出下载 ──────────────────────────
@@ -241,7 +560,7 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `决策人格-${top1Info.name}.png`;
+    a.download = `决策人格报告-${top1Info.name}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -249,7 +568,123 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
   }, "image/png");
 }
 
+/* ── 计算总高度 ──────────────────────────── */
+function calculateTotalHeight(
+  ctx: CanvasRenderingContext2D,
+  data: ShareCardData,
+  top1Info: { description: string },
+  _color: string
+): number {
+  let h = 0;
+
+  // Logo + 人格揭示 + 标签 + 置信度
+  h += 60 + 14 + 55 + 52 + 28 + 40 + 30;
+
+  // 雷达图
+  h += 50 + 220;
+
+  // 描述
+  h += 10;
+  const descLines = wrapText(
+    ctx,
+    top1Info.description,
+    CONTENT_W,
+    "15px -apple-system, sans-serif"
+  );
+  h += descLines.length * 24;
+
+  // Section 2: 优势与风险
+  h += 16 + 1 + 24 + 28; // separator + title
+  let maxStrRiskH = 0;
+  const halfW = (CONTENT_W - 20) / 2;
+  // 优势高度
+  let sH = 32;
+  for (const s of data.strengths) {
+    const lines = wrapText(ctx, `· ${s}`, halfW - 28, "13px -apple-system, sans-serif");
+    sH += lines.length * 20 + 6;
+  }
+  // 风险高度
+  let rH = 32;
+  for (const r of data.risks) {
+    const lines = wrapText(ctx, `· ${r}`, halfW - 28, "13px -apple-system, sans-serif");
+    rH += lines.length * 20 + 6;
+  }
+  maxStrRiskH = Math.max(sH, rH);
+  h += maxStrRiskH + 8;
+
+  // Section 3: 行为证据
+  h += 1 + 24 + 24; // separator + title
+  for (const ev of data.evidence) {
+    const lines = wrapText(ctx, `· ${ev}`, CONTENT_W - 10, "13px -apple-system, sans-serif");
+    h += lines.length * 20 + 8;
+  }
+
+  // Section 4: JD5
+  if (data.jd5Weak.length > 0) {
+    h += 4 + 1 + 24 + 8 + 14 + 32; // separator + title + subtitle
+    for (const weak of data.jd5Weak) {
+      const cardLines = wrapText(
+        ctx,
+        weak.description,
+        CONTENT_W - 40,
+        "13px -apple-system, sans-serif"
+      );
+      const questionLines = wrapText(
+        ctx,
+        `💡 ${weak.question}`,
+        CONTENT_W - 40,
+        "12px -apple-system, sans-serif"
+      );
+      h += 32 + cardLines.length * 20 + 8 + questionLines.length * 18 + 16 + 10;
+    }
+  }
+
+  // Section 5: 风险路径回放
+  if (data.trapOutcome && data.trapTitle) {
+    h += 4 + 1 + 24 + 28; // separator + title
+    for (const item of data.trapOutcome.timeline) {
+      const evtLines = wrapText(
+        ctx,
+        item.text,
+        CONTENT_W - 50,
+        "13px -apple-system, sans-serif"
+      );
+      h += 18 + evtLines.length * 20 + 12;
+    }
+    h += 8 + 82; // state delta panel
+  }
+
+  // Section 6: 升级路径
+  if (data.upgradeTips.length > 0) {
+    h += 4 + 1 + 24 + 24; // separator + title
+    for (const tip of data.upgradeTips) {
+      const tipLines = wrapText(
+        ctx,
+        tip,
+        CONTENT_W - 44,
+        "13px -apple-system, sans-serif"
+      );
+      h += tipLines.length * 20 + 16 + 10;
+    }
+  }
+
+  // 底部区域
+  h += 20 + 1 + 24 + 110 + 50 + 30; // QR + footer
+
+  return h + 40; // 安全边距
+}
+
 /* ── 辅助函数 ──────────────────────────── */
+
+function drawSeparator(ctx: CanvasRenderingContext2D, y: number): number {
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(MARGIN, y);
+  ctx.lineTo(CARD_W - MARGIN, y);
+  ctx.stroke();
+  return y;
+}
 
 function drawGlow(
   ctx: CanvasRenderingContext2D,
@@ -302,10 +737,12 @@ function drawRadar(
 
   function getPoint(i: number, val: number) {
     const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
-    return { x: cx + radius * val * Math.cos(angle), y: cy + radius * val * Math.sin(angle) };
+    return {
+      x: cx + radius * val * Math.cos(angle),
+      y: cy + radius * val * Math.sin(angle),
+    };
   }
 
-  // 网格
   for (const lvl of levels) {
     ctx.beginPath();
     for (let i = 0; i < n; i++) {
@@ -318,7 +755,6 @@ function drawRadar(
     ctx.stroke();
   }
 
-  // 轴线
   for (let i = 0; i < n; i++) {
     const p = getPoint(i, 1);
     ctx.beginPath();
@@ -329,7 +765,6 @@ function drawRadar(
     ctx.stroke();
   }
 
-  // 数据多边形
   ctx.beginPath();
   for (let i = 0; i < n; i++) {
     const val = 0.1 + (dist[PERSONAS_ORDER[i]] ?? 0) * 0.9;
@@ -343,7 +778,6 @@ function drawRadar(
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // 数据点
   for (let i = 0; i < n; i++) {
     const val = 0.1 + (dist[PERSONAS_ORDER[i]] ?? 0) * 0.9;
     const p = getPoint(i, Math.min(val, 1));
@@ -353,7 +787,6 @@ function drawRadar(
     ctx.fill();
   }
 
-  // 标签
   const labelNames = PERSONAS_ORDER.map((p) => PERSONA_INFO[p].name);
   ctx.font = "500 12px -apple-system, sans-serif";
   ctx.textAlign = "center";
