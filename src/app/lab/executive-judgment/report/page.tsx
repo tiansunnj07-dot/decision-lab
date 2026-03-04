@@ -83,6 +83,7 @@ export default function ReportPage() {
       await downloadShareCard(contentRef.current, result.top1);
     } catch (e) {
       console.error("生成报告卡片失败:", e);
+      alert("生成报告卡片失败：" + (e instanceof Error ? e.message : "未知错误"));
     } finally {
       setIsGenerating(false);
     }
