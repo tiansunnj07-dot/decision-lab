@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,12 +21,14 @@ import {
   Target,
   BookOpen,
   Star,
+  Loader2,
 } from "lucide-react";
 import { useExperiment } from "@/components/lab/executive-judgment/ExperimentProvider";
 import { PERSONA_INFO, JD5_STEPS } from "@/lib/lab/personaMetadata";
 import { generateEvidence } from "@/lib/lab/evidenceGenerator";
 import { CLUSTER_NAMES } from "@/lib/lab/personalityQuestions";
 import { getTrapByPersona } from "@/lib/lab/trapData";
+import { downloadShareCard } from "@/lib/lab/generateShareCard";
 import { TendencyRadar } from "@/components/lab/executive-judgment/TendencyRadar";
 import type { Persona } from "@/lib/lab/decisionEngine";
 
@@ -35,6 +37,7 @@ export default function ReportPage() {
   const { state, dispatch } = useExperiment();
   const reportRef = useRef<HTMLDivElement>(null);
   const result = state.labResult;
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // 生成高级证据
   const evidence = useMemo(() => {
@@ -77,6 +80,29 @@ export default function ReportPage() {
   function handleRestart() {
     dispatch({ type: "RESET" });
     router.push("/lab/executive-judgment");
+  }
+
+  async function handleDownloadCard() {
+    if (!result || isGenerating) return;
+    
+    setIsGenerating(true);
+    try {
+      const jd5WeakNames = result!.jd5WeakTop2.map(
+        (w) => `${w.key} ${JD5_STEPS[w.key].name}`
+      );
+      await downloadShareCard({
+        top1: result.top1,
+        top2: result.top2,
+        confidence: result.confidence,
+        personaDist: result.personaDist,
+        evidence,
+        jd5WeakNames,
+      });
+    } catch (e) {
+      console.error("生成分享卡片失败:", e);
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
   return (
@@ -377,29 +403,22 @@ export default function ReportPage() {
         {/* CTA 按钮组 */}
         <div className="space-y-3">
           <Button
-            onClick={() => {
-              // 分享参数
-              const params = new URLSearchParams({
-                p: result.top1,
-                c: String(confidencePercent),
-              });
-              const url = `${window.location.origin}/lab/executive-judgment/share?${params}`;
-              if (navigator.share) {
-                navigator.share({
-                  title: `我的决策人格是「${top1Info.name}」`,
-                  text: `我在甜博士判断力训练中被识别为「${top1Info.name}」，你也来试试？`,
-                  url,
-                });
-              } else {
-                navigator.clipboard.writeText(url);
-                alert("分享链接已复制到剪贴板！");
-              }
-            }}
+            onClick={handleDownloadCard}
+            disabled={isGenerating}
             size="lg"
-            className="w-full bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-600"
+            className="w-full bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 dark:bg-violet-500 dark:hover:bg-violet-600"
           >
-            <Download className="mr-2 h-4 w-4" />
-            分享我的报告
+            {isGenerating ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                生成中…
+              </>
+            ) : (
+              <>
+                <Download className="mr-2 h-4 w-4" />
+                下载我的报告卡
+              </>
+            )}
           </Button>
 
           <Button
