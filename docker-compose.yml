@@ -1,0 +1,14 @@
+services:
+  web:
+    build: .
+    container_name: sweet-doctor-site
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - sweet-network
+
+networks:
+  sweet-network:
+    name: sweet-network
+    driver: bridge
