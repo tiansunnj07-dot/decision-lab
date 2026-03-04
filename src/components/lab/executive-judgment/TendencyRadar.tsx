@@ -12,11 +12,13 @@ const PERSONAS_ORDER: Persona[] = ["E", "A", "D", "I", "O"];
 
 /**
  * 纯 SVG 五维雷达图
+ * 使用扩展 viewBox 保证长标签（如"完美主义者"）完整显示
  */
 export function TendencyRadar({ personaDist, size = 240 }: TendencyRadarProps) {
+  const pad = 30; // 标签溢出预留
   const cx = size / 2;
   const cy = size / 2;
-  const radius = size * 0.38;
+  const radius = size * 0.36;
   const levels = [0.2, 0.4, 0.6, 0.8, 1.0];
 
   // 角度计算（从顶部开始，顺时针）
@@ -37,7 +39,6 @@ export function TendencyRadar({ personaDist, size = 240 }: TendencyRadarProps) {
   // 数据多边形
   const dataPoints = PERSONAS_ORDER.map((p, i) => {
     const val = personaDist[p] ?? 0;
-    // 将 0~1 的分布值映射到雷达图上（最少 0.1 的基础半径）
     const normalized = 0.1 + val * 0.9;
     return getPoint(i, Math.min(normalized, 1));
   });
@@ -48,7 +49,7 @@ export function TendencyRadar({ personaDist, size = 240 }: TendencyRadarProps) {
 
   // 标签位置（稍微偏外）
   const labels = PERSONAS_ORDER.map((p, i) => {
-    const pt = getPoint(i, 1.22);
+    const pt = getPoint(i, 1.25);
     return { ...pt, persona: p };
   });
 
@@ -56,7 +57,7 @@ export function TendencyRadar({ personaDist, size = 240 }: TendencyRadarProps) {
     <svg
       width={size}
       height={size}
-      viewBox={`0 0 ${size} ${size}`}
+      viewBox={`${-pad} ${-pad / 2} ${size + pad * 2} ${size + pad}`}
       className="mx-auto"
     >
       {/* 网格 */}

@@ -27,7 +27,7 @@ const PERSONAS: Persona[] = ["E", "A", "D", "I", "O"];
 
 const PERSONA_NAME_CN: Record<Persona, string> = {
   E: "远征者",
-  A: "结构师",
+  A: "架构师",
   D: "守城者",
   I: "直觉派",
   O: "完美主义者"

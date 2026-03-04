@@ -34,7 +34,7 @@ export const PERSONA_INFO: Record<Persona, PersonaInfo> = {
   },
   A: {
     key: "A",
-    name: "结构师",
+    name: "架构师",
     subtitle: "Architect",
     description:
       "你的决策风格以结构化分析为核心。你倾向于拆解问题、理清逻辑，在框架和模型中寻找答案。",

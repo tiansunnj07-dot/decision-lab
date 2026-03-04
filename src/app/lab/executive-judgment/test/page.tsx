@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,16 @@ import type { Answer, Trap } from "@/lib/lab/decisionEngine";
 
 type Phase = "test" | "computing";
 
+/** Fisher-Yates 洗牌算法 */
+function shuffleArray<T>(arr: T[]): T[] {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 export default function TestPage() {
   const router = useRouter();
   const { state, dispatch } = useExperiment();
@@ -21,8 +31,19 @@ export default function TestPage() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [computingStep, setComputingStep] = useState(0);
 
-  const total = QUESTIONS_V1_18.length;
-  const question = QUESTIONS_V1_18[currentIndex];
+  // 将每道题的选项顺序随机打乱（仅展示层，不影响后端计算）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const shuffledQuestions = useMemo(
+    () =>
+      QUESTIONS_V1_18.map((q) => ({
+        ...q,
+        options: shuffleArray(q.options),
+      })),
+    []
+  );
+
+  const total = shuffledQuestions.length;
+  const question = shuffledQuestions[currentIndex];
   const progress = (currentIndex / total) * 100;
 
   /* ── 选择选项 ────────────────────────── */
@@ -179,9 +200,9 @@ export default function TestPage() {
           </p>
         </div>
 
-        {/* 选项 */}
+        {/* 选项（顺序已随机打乱） */}
         <div className="space-y-3">
-          {question.options.map((opt) => (
+          {question.options.map((opt, idx) => (
             <button
               key={opt.key}
               onClick={() => handleSelect(opt.key)}
@@ -190,7 +211,7 @@ export default function TestPage() {
             >
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-300 text-xs font-medium text-slate-500 transition-colors group-hover:border-violet-400 group-hover:text-violet-600 dark:border-slate-600 dark:text-slate-400 dark:group-hover:border-violet-500 dark:group-hover:text-violet-400">
-                  {opt.key}
+                  {String.fromCharCode(65 + idx)}
                 </span>
                 <span className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">
                   {opt.text}

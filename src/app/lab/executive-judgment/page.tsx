@@ -49,7 +49,7 @@ export default function ExecutiveJudgmentEntryPage() {
             实验说明
           </h2>
           <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-            我们会通过 18 道商业决策场景，识别你的决策人格类型（远征者、结构师、守城者、直觉派、完美主义者），
+            我们会通过 18 道商业决策场景，识别你的决策人格类型（远征者、架构师、守城者、直觉派、完美主义者），
             然后用一个「陷阱关卡」暴露你的认知盲区——不是判对错，而是让你看见自己的判断路径。
           </p>
         </div>
