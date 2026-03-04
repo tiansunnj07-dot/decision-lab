@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   Card,
   CardHeader,
@@ -15,7 +16,7 @@ interface ExperimentCardProps {
 export function ExperimentCard({ experiment }: ExperimentCardProps) {
   const isLive = experiment.status === "live";
 
-  return (
+  const card = (
     <Card
       className={cn(
         "relative overflow-hidden transition-all duration-300",
@@ -56,4 +57,10 @@ export function ExperimentCard({ experiment }: ExperimentCardProps) {
       </CardContent>
     </Card>
   );
+
+  if (isLive) {
+    return <Link href={`/lab/${experiment.slug}`}>{card}</Link>;
+  }
+
+  return card;
 }
