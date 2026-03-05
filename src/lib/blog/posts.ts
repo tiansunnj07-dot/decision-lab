@@ -13,6 +13,15 @@ export interface BlogPost {
  */
 export const posts: BlogPost[] = [
   {
+    slug: "roaming-the-data-universe",
+    title: "漫游数据宇宙：从结绳记事到 AI 引擎的演进史",
+    description:
+      "数据并非近代的造物，它的根基与人类文字一样悠久。从泥板上的契刻到云端的比特，我们穿越了手工时代、机械时代、电子时代，最终步入万物皆可计算的数字时代。",
+    tags: ["数据历史", "AI", "大数据", "数字化转型", "数据产品"],
+    date: "2026-03-05",
+    readingTime: "12 分钟",
+  },
+  {
     slug: "taming-the-data-future",
     title: "驯服数据未来：AI 与大数据时代的个人进阶指南",
     description:
